@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h3>Monitoramento em Tempo Real</h3>
+  <span class="badge bg-success" id="statusConexao">Polling Ativo (2s)</span>
+</div>
+
+<!-- Cards Informativos -->
+<div class="row g-3 mb-4">
+  <div class="col-md-3">
+    <div class="card bg-primary text-white shadow-sm">
+      <div class="card-body">
+        <h6 class="card-title">Pessoas na Sala</h6>
+        <h2 id="cardTotalPresentes">0</h2>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card bg-danger text-white shadow-sm">
+      <div class="card-body">
+        <h6 class="card-title">Tentativas de Invasão</h6>
+        <h2 id="cardInvasoes">0</h2>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card bg-warning text-dark shadow-sm">
+      <div class="card-body">
+        <h6 class="card-title">Acessos Negados</h6>
+        <h2 id="cardNegados">0</h2>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card bg-success text-white shadow-sm">
+      <div class="card-body">
+        <h6 class="card-title">Entradas Registradas</h6>
+        <h2 id="cardEntradas">0</h2>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3">
+  <!-- Pessoas Atualmente na Sala -->
+  <div class="col-md-4">
+    <div class="card shadow-sm h-100">
+      <div class="card-header bg-dark text-white font-weight-bold">Presentes na Sala NDA</div>
+      <div class="card-body p-0">
+        <ul class="list-group list-group-flush" id="listaPresentes">
+          <li class="list-group-item text-muted">Nenhum colaborador na sala.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Incidentes e Alertas -->
+  <div class="col-md-4">
+    <div class="card shadow-sm h-100">
+      <div class="card-header bg-danger text-white font-weight-bold">Alertas Críticos Recentes</div>
+      <div class="card-body p-0">
+        <ul class="list-group list-group-flush" id="listaAlertas">
+          <li class="list-group-item text-muted">Sem alertas recentes.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Feed Geral de Eventos -->
+  <div class="col-md-4">
+    <div class="card shadow-sm h-100">
+      <div class="card-header bg-secondary text-white font-weight-bold">Últimos Eventos</div>
+      <div class="card-body p-0">
+        <ul class="list-group list-group-flush" id="listaHistorico">
+          <li class="list-group-item text-muted">Aguardando dados...</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  function badgeClasse(tipo) {
+    if (tipo === 'ENTRADA') return 'bg-success';
+    if (tipo === 'SAIDA') return 'bg-info text-dark';
+    if (tipo === 'ACESSO_NEGADO') return 'bg-warning text-dark';
+    return 'bg-danger';
+  }
+
+  async function atualizarPainel() {
+    try {
+      const res = await fetch('/api/monitoramento');
+      if (!res.ok) return;
+      const data = await res.json();
+
+      // Cards
+      document.getElementById('cardTotalPresentes').innerText = data.total_presentes;
+      document.getElementById('cardInvasoes').innerText = data.invasoes.length;
+      document.getElementById('cardNegados').innerText = data.negados.length;
+      document.getElementById('cardEntradas').innerText = data.ultimas_entradas.length;
+
+      // Lista de presentes
+      const listaPresentes = document.getElementById('listaPresentes');
+      if (data.presentes.length === 0) {
+        listaPresentes.innerHTML = '<li class="list-group-item text-muted">Nenhum colaborador na sala.</li>';
+      } else {
+        listaPresentes.innerHTML = data.presentes.map(p => `
+          <li class="list-group-item d-flex justify-content-between align-items-center">
+            <div>
+              <strong>${p.nome}</strong><br>
+              <small class="text-muted">Desde: ${p.desde}</small>
+            </div>
+            <span class="badge bg-primary">Dentro</span>
+          </li>
+        `).join('');
+      }
+
+      // Alertas criticos (invasoes e negados)
+      const alertas = [...data.invasoes, ...data.negados].slice(0, 5);
+      const listaAlertas = document.getElementById('listaAlertas');
+      if (alertas.length === 0) {
+        listaAlertas.innerHTML = '<li class="list-group-item text-muted">Sem alertas recentes.</li>';
+      } else {
+        listaAlertas.innerHTML = alertas.map(a => `
+          <li class="list-group-item list-group-item-danger d-flex justify-content-between align-items-center">
+            <div>
+              <strong>${a.tipo_evento}</strong> - ${a.nome || 'Tag Desconhecida'}<br>
+              <small>${a.timestamp} | Tag: ${a.tag_rfid}</small>
+            </div>
+          </li>
+        `).join('');
+      }
+
+      // Historico
+      const listaHistorico = document.getElementById('listaHistorico');
+      if (data.historico_recente.length === 0) {
+        listaHistorico.innerHTML = '<li class="list-group-item text-muted">Aguardando eventos...</li>';
+      } else {
+        listaHistorico.innerHTML = data.historico_recente.map(h => `
+          <li class="list-group-item d-flex justify-content-between align-items-center py-2">
+            <div>
+              <span class="badge ${badgeClasse(h.tipo_evento)}">${h.tipo_evento}</span>
+              <span class="ms-1">${h.nome || h.tag_rfid}</span>
+            </div>
+            <small class="text-muted">${h.timestamp.split(' ')[1]}</small>
+          </li>
+        `).join('');
+      }
+    } catch (err) {
+      document.getElementById('statusConexao').className = 'badge bg-secondary';
+      document.getElementById('statusConexao').innerText = 'Desconectado';
+    }
+  }
+
+  // Inicia imediatamente e atualiza a cada 2 segundos
+  atualizarPainel();
+  setInterval(atualizarPainel, 2000);
+</script>
+{% endblock %}
