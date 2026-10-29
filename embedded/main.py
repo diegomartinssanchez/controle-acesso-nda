@@ -10,6 +10,7 @@ import sync
 
 BACKEND_URL = "http://localhost:5000"
 SIMULACAO = "--simular" in sys.argv
+INTERVALO_ATUALIZACAO_CACHE = 10
 
 PIN_LED_VERDE = 8
 PIN_LED_VERM = 7
@@ -144,12 +145,22 @@ def loop_principal():
     print(f"Colaboradores carregados em cache: {len(cache)}")
     
     estado_usuarios = {}
+    ultimo_sync_cache = time.time()
 
     try:
         while True:
             try:
+                agora = time.time()
+
+                if agora - ultimo_sync_cache >= INTERVALO_ATUALIZACAO_CACHE:
+                    cache_atualizado = sync.carregar_cache(BACKEND_URL)
+                    if cache_atualizado:
+                        cache = cache_atualizado
+                    ultimo_sync_cache = agora
+
                 tag = ler_tag()
                 if not tag:
+                    time.sleep(0.3)  # Evita sobrecarga de CPU na Raspberry enquanto nao ha cartao
                     continue
 
                 evento = processar_acesso(tag, cache, estado_usuarios)
